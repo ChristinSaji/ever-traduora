@@ -13,10 +13,6 @@ Parameters:
     Type: String
     Description: The master password for RDS.
     NoEcho: true
-  RDSInstanceType:
-    Type: String
-    Default: "db.t2.small"
-    Description: The instance type for RDS.
 
 Resources:
   # VPC
@@ -90,7 +86,7 @@ Resources:
         - Key: Name
           Value: TraduoraPrivateSubnet2
 
-  # Private Subnet for RDS
+  # Private Subnets for RDS
   PrivateSubnet3:
     Type: AWS::EC2::Subnet
     Properties:
@@ -102,6 +98,17 @@ Resources:
         - Key: Name
           Value: TraduoraPrivateSubnet3
 
+  PrivateSubnet4:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: "10.0.6.0/24"
+      MapPublicIpOnLaunch: false
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: TraduoraPrivateSubnet4
+
   # RDS Subnet Group
   RDSSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
@@ -109,6 +116,7 @@ Resources:
       DBSubnetGroupDescription: Subnet group for RDS
       SubnetIds:
         - !Ref PrivateSubnet3
+        - !Ref PrivateSubnet4
       Tags:
         - Key: Name
           Value: RDSSubnetGroup
@@ -132,10 +140,10 @@ Resources:
       DBName: !Ref RDSDBName
       MasterUsername: !Ref RDSUsername
       MasterUserPassword: !Ref RDSPassword
-      DBInstanceClass: !Ref RDSInstanceType
+      DBInstanceClass: "db.t3.micro"
       AllocatedStorage: 20
       Engine: mysql
-      EngineVersion: "8.0"
+      EngineVersion: "8.0.32"
       PubliclyAccessible: false
       VPCSecurityGroups:
         - !Ref RDSInstanceSecurityGroup
@@ -203,6 +211,12 @@ Resources:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       SubnetId: !Ref PrivateSubnet3
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnet4RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet4
       RouteTableId: !Ref PrivateRouteTable
 
   # Elastic IP and NAT Gateway
@@ -309,6 +323,7 @@ Resources:
   # Auto Scaling Group
   AutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
+    DependsOn: RDSInstance
     Properties:
       DesiredCapacity: 2
       MaxSize: 4
