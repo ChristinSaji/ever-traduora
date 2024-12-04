@@ -1,5 +1,23 @@
 AWSTemplateFormatVersion: "2010-09-09"
 
+Parameters:
+  RDSDBName:
+    Type: String
+    Default: "tr_dev"
+    Description: The database name for RDS.
+  RDSUsername:
+    Type: String
+    Default: "tr"
+    Description: The master username for RDS.
+  RDSPassword:
+    Type: String
+    Description: The master password for RDS.
+    NoEcho: true
+  RDSInstanceType:
+    Type: String
+    Default: "db.t2.small"
+    Description: The instance type for RDS.
+
 Resources:
   # VPC
   VPC:
@@ -26,7 +44,7 @@ Resources:
       VpcId: !Ref VPC
       InternetGatewayId: !Ref InternetGateway
 
-  # Public Subnets (for Load Balancer and EC2 Instances)
+  # Public Subnets
   PublicSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
@@ -49,7 +67,7 @@ Resources:
         - Key: Name
           Value: TraduoraPublicSubnet2
 
-  # Private Subnets (for EC2 Instances)
+  # Private Subnets for EC2
   PrivateSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
@@ -71,6 +89,57 @@ Resources:
       Tags:
         - Key: Name
           Value: TraduoraPrivateSubnet2
+
+  # Private Subnet for RDS
+  PrivateSubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: "10.0.5.0/24"
+      MapPublicIpOnLaunch: false
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: TraduoraPrivateSubnet3
+
+  # RDS Subnet Group
+  RDSSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet group for RDS
+      SubnetIds:
+        - !Ref PrivateSubnet3
+      Tags:
+        - Key: Name
+          Value: RDSSubnetGroup
+
+  # RDS Security Group
+  RDSInstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow MySQL access from EC2 instances
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !GetAtt TraduoraInstanceSecurityGroup.GroupId
+
+  # RDS Instance
+  RDSInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBName: !Ref RDSDBName
+      MasterUsername: !Ref RDSUsername
+      MasterUserPassword: !Ref RDSPassword
+      DBInstanceClass: !Ref RDSInstanceType
+      AllocatedStorage: 20
+      Engine: mysql
+      EngineVersion: "8.0"
+      PubliclyAccessible: false
+      VPCSecurityGroups:
+        - !Ref RDSInstanceSecurityGroup
+      DBSubnetGroupName: !Ref RDSSubnetGroup
 
   # Route Tables
   PublicRouteTable:
@@ -130,6 +199,12 @@ Resources:
       SubnetId: !Ref PrivateSubnet2
       RouteTableId: !Ref PrivateRouteTable
 
+  PrivateSubnet3RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet3
+      RouteTableId: !Ref PrivateRouteTable
+
   # Elastic IP and NAT Gateway
   ElasticIP:
     Type: AWS::EC2::EIP
@@ -159,10 +234,6 @@ Resources:
         - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
-          CidrIp: "0.0.0.0/0"
-        - IpProtocol: tcp
-          FromPort: 8080
-          ToPort: 8080
           CidrIp: "0.0.0.0/0"
 
   # Application Load Balancer
@@ -229,10 +300,10 @@ Resources:
             chmod +x /usr/local/bin/docker-compose
             systemctl start docker
             systemctl enable docker
-            usermod -a -G docker ec2-user
             cd /home/ec2-user
             git clone https://github.com/ChristinSaji/ever-traduora.git
             cd ever-traduora
+            echo TR_DB_HOST=$(aws rds describe-db-instances --query 'DBInstances[0].Endpoint.Address' --output text) > .env
             docker-compose up -d
 
   # Auto Scaling Group
@@ -256,3 +327,10 @@ Resources:
         - Key: Name
           Value: TraduoraAutoScaling
           PropagateAtLaunch: true
+
+Outputs:
+  RDSEndpoint:
+    Description: The endpoint of the RDS instance
+    Value: !GetAtt RDSInstance.Endpoint.Address
+    Export:
+      Name: TraduoraRDSEndpoint
