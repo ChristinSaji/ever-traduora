@@ -28,6 +28,7 @@
     "docusaurus": "^1.14.7"
   },
   "dependencies": {
+    "@ever-traduora/docs": "file:",
     "bootstrap": "^4.6.2",
     "jpegtran-bin": "^7.0.0"
   },
