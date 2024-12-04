@@ -13,6 +13,14 @@ Parameters:
     Type: String
     Description: The master password for RDS.
     NoEcho: true
+  BackupTagKey:
+    Type: String
+    Default: "backup"
+    Description: The key for the backup resource tag.
+  BackupTagValue:
+    Type: String
+    Default: "traduora"
+    Description: The value for the backup resource tag.
 
 Resources:
   # VPC
@@ -148,6 +156,44 @@ Resources:
       VPCSecurityGroups:
         - !Ref RDSInstanceSecurityGroup
       DBSubnetGroupName: !Ref RDSSubnetGroup
+      Tags:
+        - Key: !Ref BackupTagKey
+          Value: !Ref BackupTagValue
+
+  # AWS Backup Vault
+  BackupVault:
+    Type: AWS::Backup::BackupVault
+    Properties:
+      BackupVaultName: TraduoraBackupVault
+
+  # AWS Backup Plan
+  BackupPlan:
+    Type: AWS::Backup::BackupPlan
+    Properties:
+      BackupPlan:
+        BackupPlanName: TraduoraWeeklyBackupPlan
+        BackupPlanRule:
+          - RuleName: TraduoraWeeklyBackupRule
+            TargetBackupVault: !Ref BackupVault
+            ScheduleExpression: cron(0 0 ? * 1 *) # Every Monday at 12:00 AM UTC
+            Lifecycle:
+              DeleteAfterDays: 30
+            StartWindowMinutes: 60
+            CompletionWindowMinutes: 180
+
+  # AWS Backup Selection
+  BackupSelection:
+    Type: AWS::Backup::BackupSelection
+    DependsOn: RDSInstance
+    Properties:
+      BackupPlanId: !Ref BackupPlan
+      BackupSelection:
+        SelectionName: TraduoraBackupSelection
+        IamRoleArn: arn:aws:iam::095276585962:role/LabRole
+        ListOfTags:
+          - ConditionKey: !Ref BackupTagKey
+            ConditionValue: !Ref BackupTagValue
+            ConditionType: STRINGEQUALS
 
   # Route Tables
   PublicRouteTable:
