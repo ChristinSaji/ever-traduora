@@ -131,7 +131,7 @@ Resources:
         - IpProtocol: tcp
           FromPort: 3306
           ToPort: 3306
-          SourceSecurityGroupId: !GetAtt TraduoraInstanceSecurityGroup.GroupId
+          SourceSecurityGroupId: !GetAtt EC2InstanceSecurityGroup.GroupId
 
   # RDS Instance
   RDSInstance:
@@ -261,6 +261,39 @@ Resources:
           FromPort: 22
           ToPort: 22
           CidrIp: "0.0.0.0/0"
+
+  # WAF Web ACL
+  WAFWebACL:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      DefaultAction:
+        Allow: {}
+      Scope: REGIONAL
+      VisibilityConfig:
+        CloudWatchMetricsEnabled: true
+        MetricName: TraduoraWAF
+        SampledRequestsEnabled: true
+      Name: TraduoraWebACL
+      Rules:
+        - Name: LimitIPRate
+          Priority: 0
+          Action:
+            Block: {}
+          Statement:
+            RateBasedStatement:
+              Limit: 1000
+              AggregateKeyType: IP
+          VisibilityConfig:
+            CloudWatchMetricsEnabled: true
+            MetricName: LimitIPRate
+            SampledRequestsEnabled: true
+
+  # WAF Association with ALB
+  WAFAssociation:
+    Type: AWS::WAFv2::WebACLAssociation
+    Properties:
+      ResourceArn: !Ref ApplicationLoadBalancer
+      WebACLArn: !GetAtt WAFWebACL.Arn
 
   # Application Load Balancer
   ApplicationLoadBalancer:
