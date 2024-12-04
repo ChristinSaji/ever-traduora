@@ -234,20 +234,32 @@ Resources:
         - Key: Name
           Value: TraduoraNATGateway
 
-  # Security Group for EC2 and Load Balancer
-  TraduoraInstanceSecurityGroup:
+  # Security Group for Load Balancer
+  LoadBalancerSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Allow SSH and app-specific traffic
+      GroupDescription: Allow HTTP traffic from anywhere
       VpcId: !Ref VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
-          FromPort: 22
-          ToPort: 22
+          FromPort: 80
+          ToPort: 80
           CidrIp: "0.0.0.0/0"
+
+   # Security Group for EC2 Instances
+  EC2InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow HTTP traffic from Load Balancer
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
+          SourceSecurityGroupId: !Ref LoadBalancerSecurityGroup
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
           CidrIp: "0.0.0.0/0"
 
   # Application Load Balancer
@@ -259,7 +271,7 @@ Resources:
         - !Ref PublicSubnet1
         - !Ref PublicSubnet2
       SecurityGroups:
-        - !Ref TraduoraInstanceSecurityGroup
+        - !Ref LoadBalancerSecurityGroup
       IpAddressType: ipv4
       Type: application
       Tags:
@@ -304,7 +316,7 @@ Resources:
         IamInstanceProfile:
           Arn: arn:aws:iam::095276585962:instance-profile/LabInstanceProfile
         SecurityGroupIds:
-          - !Ref TraduoraInstanceSecurityGroup
+          - !Ref EC2InstanceSecurityGroup
         UserData:
           Fn::Base64: !Sub |
             #!/bin/bash
@@ -349,3 +361,7 @@ Outputs:
     Value: !GetAtt RDSInstance.Endpoint.Address
     Export:
       Name: TraduoraRDSEndpoint
+
+  LoadBalancerDNSName:
+    Description: DNS name of the load balancer
+    Value: !GetAtt ApplicationLoadBalancer.DNSName
